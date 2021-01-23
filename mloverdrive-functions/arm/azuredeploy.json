@@ -1,0 +1,632 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "prefix": {
+            "type": "string",
+            "defaultValue": "mloverdrive",
+            "metadata": {
+                "description": "Name of the resourceGroup to create"
+            }
+        }
+    },
+    "variables": {
+        "location": "[resourceGroup().location]",
+        "storageAccountInputName": "[concat(parameters('prefix'),'input')]",
+        "storageAccountOutputName": "[concat(parameters('prefix'),'output')]",
+        "storageAccountInputContainerName": "input",
+        "storageAccountOutputContainerName": "output",
+        "functionName": "[concat(parameters('prefix'),'-function')]",
+        "webSiteConfigName": "[concat(parameters('prefix'),'-functionapp')]",
+        "webSiteConfigJavaVersion": "1.8",
+        "webSitePropertiesJavaOpts": "-Xms1g -Xmx3g",
+        "webServerfarmsName": "[concat(parameters('prefix'),'-webserverfarm')]",
+        "insightsName": "[concat(parameters('prefix'),'-insight')]",
+        "storageAccountFunctionName": "[concat(parameters('prefix'),'func')]",
+        "alertMgmtSmartDetectRuleName": "[concat(parameters('prefix'),'-smartdetectrule')]",
+        "actiongroups_application_insights_smart_detection_externalid": "[concat('/subscriptions/',subscription().subscriptionId,'/resourceGroups/',resourceGroup().name,'/providers/microsoft.insights/actiongroups/application insights smart detection')]",
+        "eventGridSystemTopicName": "[concat(parameters('prefix'),'-eventgridtopic')]",
+        "serviceBusNamespaceName": "[concat(parameters('prefix'),'-servicebusnamespace')]",
+        "serviceBusQueueName": "[concat(parameters('prefix'),'-servicebusqueue')]",
+        "diagnosticsettingsName": "Send to all locations",
+        "operationalIinsightsWorkspaceName": "[concat(parameters('prefix'),'-insightsworkspace')]",
+        "storageAccountInputSasValues": {
+            "canonicalizedResource": "[concat('/blob/', variables('storageAccountInputName'), '/', variables('storageAccountInputContainerName'))]",
+            "signedServices": "b",
+            "signedResource": "c",
+            "signedPermission": "racwdl",
+            "signedStart": "2017-05-24T00:00:00Z",
+            "signedExpiry": "2050-01-01T00:00:00Z"
+        }
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Storage/storageAccounts/providers/diagnosticsettings",
+            "apiVersion": "2017-05-01-preview",
+            "name": "[concat(variables('storageAccountInputName'),'/Microsoft.Insights/', variables('diagnosticsettingsName'))]",
+
+            "properties": {
+                "workspaceId": "[resourceId('Microsoft.Operationalinsights/workspaces', variables('operationalIinsightsWorkspaceName'))]",
+                "metrics": [
+                    {
+                        "category": "Transaction",
+                        "enabled": true
+                    }
+                ]
+            },
+            "dependsOn": [
+                "[resourceId('microsoft.operationalinsights/workspaces', variables('operationalIinsightsWorkspaceName'))]"
+            ]
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/blobServices/providers/diagnosticsettings",
+            "apiVersion": "2017-05-01-preview",
+            "name": "[concat(variables('storageAccountInputName'),'/default/Microsoft.Insights/', variables('diagnosticsettingsName'))]",
+            "properties": {
+                "workspaceId": "[resourceId('Microsoft.Operationalinsights/workspaces', variables('operationalIinsightsWorkspaceName'))]",
+                "logs": [
+                    {
+                        "category": "StorageRead",
+                        "enabled": true
+                    },
+                    {
+                        "category": "StorageWrite",
+                        "enabled": true
+                    }
+                ],
+                "metrics": [
+                    {
+                        "category": "Transaction",
+                        "enabled": true
+                    }
+                ]
+            },
+            "dependsOn": [
+                "[resourceId('microsoft.operationalinsights/workspaces', variables('operationalIinsightsWorkspaceName'))]"
+            ]
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/providers/diagnosticsettings",
+            "apiVersion": "2017-05-01-preview",
+            "name": "[concat(variables('storageAccountOutputName'),'/Microsoft.Insights/', variables('diagnosticsettingsName'))]",
+
+            "properties": {
+                "workspaceId": "[resourceId('Microsoft.Operationalinsights/workspaces', variables('operationalIinsightsWorkspaceName'))]",
+                "metrics": [
+                    {
+                        "category": "Transaction",
+                        "enabled": true
+                    }
+                ]
+            },
+            "dependsOn": [
+                "[resourceId('microsoft.operationalinsights/workspaces', variables('operationalIinsightsWorkspaceName'))]"
+            ]
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/blobServices/providers/diagnosticsettings",
+            "apiVersion": "2017-05-01-preview",
+            "name": "[concat(variables('storageAccountOutputName'),'/default/Microsoft.Insights/', variables('diagnosticsettingsName'))]",
+            "properties": {
+                "workspaceId": "[resourceId('Microsoft.Operationalinsights/workspaces', variables('operationalIinsightsWorkspaceName'))]",
+                "logs": [
+                    {
+                        "category": "StorageRead",
+                        "enabled": true
+                    },
+                    {
+                        "category": "StorageWrite",
+                        "enabled": true
+                    }
+                ],
+                "metrics": [
+                    {
+                        "category": "Transaction",
+                        "enabled": true
+                    }
+                ]
+            },
+            "dependsOn": [
+                "[resourceId('microsoft.operationalinsights/workspaces', variables('operationalIinsightsWorkspaceName'))]"
+            ]
+        },
+        {
+            "type": "microsoft.operationalinsights/workspaces",
+            "apiVersion": "2020-10-01",
+            "name": "[variables('operationalIinsightsWorkspaceName')]",
+            "location": "[variables('location')]",
+            "properties": {
+                "sku": {
+                    "name": "pergb2018"
+                },
+                "retentionInDays": 30,
+                "workspaceCapping": {
+                    "dailyQuotaGb": -1
+                },
+                "publicNetworkAccessForIngestion": "Enabled",
+                "publicNetworkAccessForQuery": "Enabled"
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountInputName'))]",
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountOutputName'))]"
+            ]
+        },
+        {
+            "type": "Microsoft.Web/sites",
+            "apiVersion": "2018-11-01",
+            "name": "[variables('webSiteConfigName')]",
+            "location": "[variables('location')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/serverfarms', variables('webServerfarmsName'))]",
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountFunctionName'))]",
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountInputName'))]",
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountOutputName'))]"
+            ],
+            "kind": "functionapp",
+            "properties": {
+                "enabled": true,
+                "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('webServerfarmsName'))]",
+                "reserved": false,
+                "isXenon": false,
+                "hyperV": false,
+                "siteConfig": {
+                    "appSettings": [
+                        {
+                            "name": "APPINSIGHTS_INSTRUMENTATIONKEY",
+                            "value": "[reference(resourceId('Microsoft.Insights/components', variables('insightsName')), providers('Microsoft.Insights', 'components').apiVersions[0]).InstrumentationKey]"
+                        },
+                        {
+                            "name": "FUNCTIONS_EXTENSION_VERSION",
+                            "value": "~3"
+                        },
+                        {
+                            "name": "FUNCTIONS_WORKER_RUNTIME",
+                            "value": "java"
+                        },
+                        {
+                            "name": "AzureWebJobsStorage",
+                            "value": "[concat('DefaultEndpointsProtocol=https;AccountName=',variables('storageAccountFunctionName'),';AccountKey=',listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountFunctionName')), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value,';EndpointSuffix=','core.windows.net')]"
+                        },
+                        {
+                            "name": "WEBSITE_CONTENTAZUREFILECONNECTIONSTRING",
+                            "value": "[concat('DefaultEndpointsProtocol=https;AccountName=',variables('storageAccountFunctionName'),';AccountKey=',listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountFunctionName')), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value,';EndpointSuffix=','core.windows.net')]"
+                        },
+                        {
+                            "name": "INPUT_STORAGE_CONNECTION_STRING",
+                            "value": "[concat('DefaultEndpointsProtocol=https;AccountName=',variables('storageAccountInputName'),';AccountKey=',listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountInputName')), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value,';EndpointSuffix=','core.windows.net')]"
+                        },
+                        {
+                            "name": "OUTPUT_STORAGE_CONNECTION_STRING",
+                            "value": "[concat('DefaultEndpointsProtocol=https;AccountName=',variables('storageAccountOutputName'),';AccountKey=',listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountOutputName')), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value,';EndpointSuffix=','core.windows.net')]"
+                        },
+                        {
+                            "name": "SERVICE_BUS_CONNECTION_STRING",
+                            "value": "[listKeys(resourceId('Microsoft.ServiceBus/namespaces/authorizationRules', variables('serviceBusNamespaceName'), 'RootManageSharedAccessKey'), providers('Microsoft.ServiceBus', 'namespaces/authorizationRules').apiVersions[0]).primaryConnectionString]"
+                        },
+                        {
+                            "name": "SERVICE_BUS_QUEUE_NAME",
+                            "value": "[variables('serviceBusQueueName')]"
+                        },
+                        {
+                            "name": "OUTPUT_STORAGE_CONTAINER_NAME",
+                            "value": "[variables('storageAccountOutputContainerName')]"
+                        },
+                        {
+                            "name": "INPUT_STORAGE_CONTAINER_NAME",
+                            "value": "[variables('storageAccountInputContainerName')]"
+                        }
+                        /*,
+                        {
+                            "name": "JAVA_OPTS",
+                            "value": "[variables('webSitePropertiesJavaOpts')]"
+                        }*/
+                    ],
+                    "use32BitWorkerProcess": true
+                },
+                "scmSiteAlsoStopped": false,
+                "clientAffinityEnabled": true,
+                "clientCertEnabled": false,
+                "hostNamesDisabled": false,
+                "containerSize": 1536,
+                "dailyMemoryTimeQuota": 0,
+                "httpsOnly": false,
+                "redundancyMode": "None"
+            }
+        },
+        {
+            "type": "microsoft.insights/components",
+            "apiVersion": "2018-05-01-preview",
+            "name": "[variables('insightsName')]",
+            "location": "[variables('location')]",
+            "kind": "web",
+            "properties": {
+                "Application_Type": "web",
+                "Flow_Type": "Redfield",
+                "Request_Source": "IbizaWebAppExtensionCreate",
+                "RetentionInDays": 90,
+                "publicNetworkAccessForIngestion": "Enabled",
+                "publicNetworkAccessForQuery": "Enabled"
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts",
+            "apiVersion": "2020-08-01-preview",
+            "name": "[variables('storageAccountFunctionName')]",
+            "location": "[variables('location')]",
+            "sku": {
+                "name": "Standard_LRS",
+                "tier": "Standard"
+            },
+            "kind": "Storage",
+            "properties": {
+                "minimumTlsVersion": "TLS1_2",
+                "networkAcls": {
+                    "bypass": "AzureServices",
+                    "virtualNetworkRules": [],
+                    "ipRules": [],
+                    "defaultAction": "Allow"
+                },
+                "supportsHttpsTrafficOnly": true,
+                "encryption": {
+                    "services": {
+                        "file": {
+                            "keyType": "Account",
+                            "enabled": true
+                        },
+                        "blob": {
+                            "keyType": "Account",
+                            "enabled": true
+                        }
+                    },
+                    "keySource": "Microsoft.Storage"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Web/serverfarms",
+            "apiVersion": "2018-02-01",
+            "name": "[variables('webServerfarmsName')]",
+            "location": "[variables('location')]",
+            "sku": {
+                "name": "EP1",
+                "tier": "ElasticPremium",
+                "size": "EP1",
+                "family": "EP",
+                "capacity": 1
+            },
+            "kind": "elastic",
+            "properties": {
+                "perSiteScaling": false,
+                "maximumElasticWorkerCount": 20,
+                "isSpot": false,
+                "reserved": false,
+                "isXenon": false,
+                "hyperV": false,
+                "targetWorkerCount": 0,
+                "targetWorkerSizeId": 0
+            }
+        },
+        {
+            "type": "microsoft.alertsmanagement/smartdetectoralertrules",
+            "apiVersion": "2019-06-01",
+            "name": "[variables('alertMgmtSmartDetectRuleName')]",
+            "location": "global",
+            "dependsOn": [
+                "[resourceId('microsoft.insights/components', variables('insightsName'))]"
+            ],
+            "properties": {
+                "description": "Failure Anomalies notifies you of an unusual rise in the rate of failed HTTP requests or dependency calls.",
+                "state": "Enabled",
+                "severity": "Sev3",
+                "frequency": "PT1M",
+                "detector": {
+                    "id": "FailureAnomaliesDetector",
+                    "name": "Failure Anomalies",
+                    "description": "Detects if your application experiences an abnormal rise in the rate of HTTP requests or dependency calls that are reported as failed. The anomaly detection uses machine learning algorithms and occurs in near real time, therefore there's no need to define a frequency for this signal.<br/></br/>To help you triage and diagnose the problem, an analysis of the characteristics of the failures and related telemetry is provided with the detection. This feature works for any app, hosted in the cloud or on your own servers, that generates request or dependency telemetry - for example, if you have a worker role that calls <a class=\"ext-smartDetecor-link\" href=\\\"https://docs.microsoft.com/azure/application-insights/app-insights-api-custom-events-metrics#trackrequest\\\" target=\\\"_blank\\\">TrackRequest()</a> or <a class=\"ext-smartDetecor-link\" href=\\\"https://docs.microsoft.com/azure/application-insights/app-insights-api-custom-events-metrics#trackdependency\\\" target=\\\"_blank\\\">TrackDependency()</a>.<br/><br/><a class=\"ext-smartDetecor-link\" href=\\\"https://docs.microsoft.com/azure/azure-monitor/app/proactive-failure-diagnostics\\\" target=\\\"_blank\\\">Learn more about Failure Anomalies</a>",
+                    "supportedResourceTypes": [
+                        "ApplicationInsights"
+                    ]
+                },
+                "scope": [
+                    "[resourceId('microsoft.insights/components', variables('insightsName'))]"
+                ],
+                "actionGroups": {
+                    "groupIds": [
+                        "[variables('actiongroups_application_insights_smart_detection_externalid')]"
+                    ]
+                }
+            }
+        },
+
+        {
+            "type": "Microsoft.Web/sites/config",
+            "apiVersion": "2018-11-01",
+            "name": "[concat(variables('webSiteConfigName'), '/web')]",
+            "location": "[variables('location')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', variables('webSiteConfigName'))]"
+            ],
+            "properties": {
+                "numberOfWorkers": 1,
+                "defaultDocuments": [
+                    "Default.htm",
+                    "Default.html",
+                    "Default.asp",
+                    "index.htm",
+                    "index.html",
+                    "iisstart.htm",
+                    "default.aspx",
+                    "index.php"
+                ],
+                "netFrameworkVersion": "v4.0",
+                "phpVersion": "5.6",
+                "requestTracingEnabled": false,
+                "remoteDebuggingEnabled": false,
+                "remoteDebuggingVersion": "VS2019",
+                "httpLoggingEnabled": false,
+                "logsDirectorySizeLimit": 35,
+                "detailedErrorLoggingEnabled": false,
+                "publishingUsername": "$javafunctest",
+                "azureStorageAccounts": {},
+                "scmType": "None",
+                "use32BitWorkerProcess": true,
+                "webSocketsEnabled": false,
+                "alwaysOn": false,
+                "javaVersion": "[variables('webSiteConfigJavaVersion')]",
+                "managedPipelineMode": "Integrated",
+                "virtualApplications": [
+                    {
+                        "virtualPath": "/",
+                        "physicalPath": "site\\wwwroot",
+                        "preloadEnabled": false
+                    }
+                ],
+                "loadBalancing": "LeastRequests",
+                "experiments": {
+                    "rampUpRules": []
+                },
+                "autoHealEnabled": false,
+                "cors": {
+                    "allowedOrigins": [
+                        "https://functions.azure.com",
+                        "https://functions-staging.azure.com",
+                        "https://functions-next.azure.com"
+                    ],
+                    "supportCredentials": false
+                },
+                "localMySqlEnabled": false,
+                "ipSecurityRestrictions": [
+                    {
+                        "ipAddress": "Any",
+                        "action": "Allow",
+                        "priority": 1,
+                        "name": "Allow all",
+                        "description": "Allow all access"
+                    }
+                ],
+                "scmIpSecurityRestrictions": [
+                    {
+                        "ipAddress": "Any",
+                        "action": "Allow",
+                        "priority": 1,
+                        "name": "Allow all",
+                        "description": "Allow all access"
+                    }
+                ],
+                "scmIpSecurityRestrictionsUseMain": false,
+                "http20Enabled": false,
+                "minTlsVersion": "1.2",
+                "ftpsState": "AllAllowed",
+                "reservedInstanceCount": 1
+            }
+        },
+        {
+            "type": "Microsoft.Web/sites/hostNameBindings",
+            "apiVersion": "2018-11-01",
+            "name": "[concat(variables('webSiteConfigName'), '/', variables('webSiteConfigName'), '.azurewebsites.net')]",
+            "location": "[variables('location')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', variables('webSiteConfigName'))]"
+            ],
+            "properties": {
+                "siteName": "[variables('functionName')]",
+                "hostNameType": "Verified"
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts",
+            "apiVersion": "2019-06-01",
+            "name": "[variables('storageAccountInputName')]",
+            "location": "[variables('location')]",
+            "sku": {
+                "name": "Standard_LRS",
+                "tier": "Standard"
+            },
+            "kind": "StorageV2",
+            "properties": {
+                "accessTier": "Hot"
+            },
+            "resources": [
+                {
+                    "type": "blobServices/containers",
+                    "apiVersion": "2019-06-01",
+                    "name": "[concat('default/', variables('storageAccountInputContainerName'))]",
+                    "dependsOn": [
+                        "[variables('storageAccountInputName')]"
+                    ]
+                }
+            ]
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts",
+            "apiVersion": "2019-06-01",
+            "name": "[variables('storageAccountOutputName')]",
+            "location": "[variables('location')]",
+            "sku": {
+                "name": "Standard_LRS",
+                "tier": "Standard"
+            },
+            "kind": "StorageV2",
+            "properties": {
+                "accessTier": "Hot"
+            },
+            "resources": [
+                {
+                    "type": "blobServices/containers",
+                    "apiVersion": "2019-06-01",
+                    "name": "[concat('default/', variables('storageAccountOutputContainerName'))]",
+                    "dependsOn": [
+                        "[variables('storageAccountOutputName')]"
+                    ]
+                }
+            ]
+        },
+        {
+            "type": "Microsoft.ServiceBus/namespaces",
+            "apiVersion": "2018-01-01-preview",
+            "name": "[variables('serviceBusNamespaceName')]",
+            "location": "[variables('location')]",
+            "sku": {
+                "name": "Standard",
+                "tier": "Standard"
+            },
+            "properties": {
+                "zoneRedundant": false
+            }
+        },
+        {
+            "type": "Microsoft.ServiceBus/namespaces/queues",
+            "apiVersion": "2017-04-01",
+            "name": "[concat(variables('serviceBusNamespaceName'), '/',variables('serviceBusQueueName'))]",
+            "location": "[variables('location')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.ServiceBus/namespaces', variables('serviceBusNamespaceName'))]"
+            ],
+            "properties": {
+                "lockDuration": "PT30S",
+                "maxSizeInMegabytes": 1024,
+                "requiresDuplicateDetection": true,
+                "requiresSession": false,
+                "defaultMessageTimeToLive": "P14D",
+                "deadLetteringOnMessageExpiration": false,
+                "enableBatchedOperations": true,
+                "duplicateDetectionHistoryTimeWindow": "PT10M",
+                "maxDeliveryCount": 10,
+                "status": "Active",
+                "autoDeleteOnIdle": "P10675199DT2H48M5.4775807S",
+                "enablePartitioning": false,
+                "enableExpress": false
+            }
+        },
+        {
+            "type": "Microsoft.ServiceBus/namespaces/AuthorizationRules",
+            "apiVersion": "2017-04-01",
+            "name": "[concat(variables('serviceBusNamespaceName'), '/RootManageSharedAccessKey')]",
+            "location": "[variables('location')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.ServiceBus/namespaces', variables('serviceBusNamespaceName'))]"
+            ],
+            "properties": {
+                "rights": [
+                    "Listen",
+                    "Manage",
+                    "Send"
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.ServiceBus/namespaces/queues/authorizationRules",
+            "apiVersion": "2017-04-01",
+            "name": "[concat(variables('serviceBusNamespaceName'), '/',variables('serviceBusQueueName'),'/', variables('serviceBusNamespaceName'), '_SERVICEBUS')]",
+            "location": "[variables('location')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.ServiceBus/namespaces/queues', variables('serviceBusNamespaceName'), variables('serviceBusQueueName'))]",
+                "[resourceId('Microsoft.ServiceBus/namespaces', variables('serviceBusNamespaceName'))]"
+            ],
+            "properties": {
+                "rights": [
+                    "Manage",
+                    "Listen",
+                    "Send"
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.EventGrid/systemTopics",
+            "apiVersion": "2020-04-01-preview",
+            "name": "[variables('eventGridSystemTopicName')]",
+            "location": "[variables('location')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountInputName'))]"
+            ],
+            "properties": {
+                "source": "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountInputName'))]",
+                "topicType": "Microsoft.Storage.StorageAccounts"
+            }
+        },
+        {
+            "type": "Microsoft.EventGrid/systemTopics/eventSubscriptions",
+            "apiVersion": "2020-04-01-preview",
+            "name": "[concat(variables('eventGridSystemTopicName'), '/testfunceventsub')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.EventGrid/systemTopics', variables('eventGridSystemTopicName'))]",
+                "[resourceId('Microsoft.ServiceBus/namespaces/queues', variables('serviceBusNamespaceName'), variables('serviceBusQueueName'))]"
+            ],
+            "properties": {
+                "destination": {
+                    "properties": {
+                        "resourceId": "[resourceId('Microsoft.ServiceBus/namespaces/queues', variables('serviceBusNamespaceName'), variables('serviceBusQueueName'))]"
+                    },
+                    "endpointType": "ServiceBusQueue"
+                },
+                "filter": {
+                    "subjectEndsWith": ".jpg",
+                    "includedEventTypes": [
+                        "Microsoft.Storage.BlobCreated"
+                    ]
+                },
+                "labels": [],
+                "eventDeliverySchema": "EventGridSchema",
+                "retryPolicy": {
+                    "maxDeliveryAttempts": 30,
+                    "eventTimeToLiveInMinutes": 1440
+                }
+            }
+        }
+
+    ],
+    "outputs": {
+        "STORAGE_INPUT_NAME": {
+            "type": "string",
+            "value": "[concat(variables('storageAccountInputName'),'.blob.core.windows.net')]"
+        },
+        "STORAGE_INPUT_SASTOKEN": {
+            "type": "string",
+            "value": "[listServiceSas(variables('storageAccountInputName'), '2019-06-01', variables('storageAccountInputSasValues')).serviceSasToken]"
+        },
+        "SERVICEBUS_QUEUE_NAME": {
+            "type": "string",
+            "value": "[variables('serviceBusQueueName')]"
+        },
+        "FUNCTION_APP_NAME": {
+            "type": "string",
+            "value": "[variables('webSiteConfigName')]"
+        },
+        "JAVA_VERSION": {
+            "type": "string",
+            "value": "[variables('webSiteConfigJavaVersion')]"
+        },
+        "RESOURCE_GROUP_NAME": {
+            "type": "string",
+            "value": "[resourceGroup().name]"
+        },
+        "APP_SERVICE_PLAN_NAME": {
+            "type": "string",
+            "value": "[variables('webServerfarmsName')]"
+        },
+        "LOCATION": {
+            "type": "string",
+            "value": "[variables('location')]"
+        }
+    }
+}
