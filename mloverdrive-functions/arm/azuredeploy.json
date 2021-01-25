@@ -234,19 +234,21 @@
             }
         },
         {
-            "type": "microsoft.insights/components",
-            "apiVersion": "2018-05-01-preview",
             "name": "[variables('insightsName')]",
+            "type": "Microsoft.Insights/components",
+            "apiVersion": "2020-02-02-preview",
             "location": "[variables('location')]",
             "kind": "web",
             "properties": {
                 "Application_Type": "web",
-                "Flow_Type": "Redfield",
-                "Request_Source": "IbizaWebAppExtensionCreate",
-                "RetentionInDays": 90,
+                "Request_Source": "rest",
+                "WorkspaceResourceId": "[resourceId('microsoft.operationalinsights/workspaces',variables('operationalIinsightsWorkspaceName'))]",
                 "publicNetworkAccessForIngestion": "Enabled",
                 "publicNetworkAccessForQuery": "Enabled"
-            }
+            },
+            "dependsOn": [
+                "[resourceId('microsoft.operationalinsights/workspaces',variables('operationalIinsightsWorkspaceName'))]"
+            ]
         },
         {
             "type": "Microsoft.Storage/storageAccounts",
