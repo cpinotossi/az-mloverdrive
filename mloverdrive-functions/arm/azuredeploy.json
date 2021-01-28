@@ -162,7 +162,7 @@
                 "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountInputName'))]",
                 "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountOutputName'))]"
             ],
-            "kind": "functionapp",
+            "kind": "functionapp,linux",
             "properties": {
                 "enabled": true,
                 "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('webServerfarmsName'))]",
@@ -224,7 +224,7 @@
                     "use32BitWorkerProcess": true
                 },
                 "scmSiteAlsoStopped": false,
-                "clientAffinityEnabled": true,
+                "clientAffinityEnabled": false,
                 "clientCertEnabled": false,
                 "hostNamesDisabled": false,
                 "containerSize": 1536,
@@ -301,7 +301,7 @@
                 "perSiteScaling": false,
                 "maximumElasticWorkerCount": 20,
                 "isSpot": false,
-                "reserved": false,
+                "reserved": true,
                 "isXenon": false,
                 "hyperV": false,
                 "targetWorkerCount": 0,
@@ -348,7 +348,7 @@
             "dependsOn": [
                 "[resourceId('Microsoft.Web/sites', variables('webSiteConfigName'))]"
             ],
-            "properties": {
+                       "properties": {
                 "numberOfWorkers": 1,
                 "defaultDocuments": [
                     "Default.htm",
@@ -361,17 +361,16 @@
                     "index.php"
                 ],
                 "netFrameworkVersion": "v4.0",
-                "phpVersion": "5.6",
+                "linuxFxVersion": "Java|8",
                 "requestTracingEnabled": false,
                 "remoteDebuggingEnabled": false,
-                "remoteDebuggingVersion": "VS2019",
                 "httpLoggingEnabled": false,
                 "logsDirectorySizeLimit": 35,
                 "detailedErrorLoggingEnabled": false,
-                "publishingUsername": "$javafunctest",
+                "publishingUsername": "[concat('$',variables('functionName'))]",
                 "azureStorageAccounts": {},
                 "scmType": "None",
-                "use32BitWorkerProcess": true,
+                "use32BitWorkerProcess": false,
                 "webSocketsEnabled": false,
                 "alwaysOn": false,
                 "javaVersion": "[variables('webSiteConfigJavaVersion')]",
